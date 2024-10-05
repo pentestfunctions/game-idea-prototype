@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roguelite Path Game with Information Gathering</title>
+  <style>
+    body {
+      background-color: #1b1b1b;
+      color: white;
+      font-family: 'Courier New', monospace;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .container {
+      width: 100%;
+      height: 3000px;
+      position: relative;
+      transition: transform 0.5s ease;
+    }
+
+    .node {
+      background-color: #2c3e50;
+      border: 2px solid #3498db;
+      width: 200px;
+      height: 150px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      position: absolute;
+      opacity: 0.5;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      cursor: pointer;
+    }
+
+    .node.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .node.completed {
+      background-color: #27ae60;
+    }
+
+    .node h3 {
+      margin: 0;
+      text-align: center;
+    }
+
+    .node .commands-list {
+      font-size: 12px;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: -1;
+    }
+
+    #card-container {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      height: 200px;
+      width: 400px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      z-index: 10;
+    }
+
+    .card {
+      width: 100px;
+      height: 150px;
+      background-color: #34495e;
+      border: 2px solid #f39c12;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      transition: transform 0.3s ease;
+      position: absolute;
+      bottom: 0;
+      transform-origin: bottom center;
+    }
+
+    .card:hover {
+      transform: translateY(-30px) scale(1.1) !important;
+      z-index: 10 !important;
+    }
+
+    .card.dragging {
+      opacity: 0.8;
+      cursor: grabbing;
+    }
+
+    #deck {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 100px;
+      height: 150px;
+      background-color: #2c3e50;
+      border: 2px solid #f39c12;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+    }
+
+    .info-panel {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 300px;
+      background-color: #2c3e50;
+      border: 2px solid #3498db;
+      border-radius: 10px;
+      padding: 15px;
+      display: none;
+      z-index: 100;
+    }
+
+    .info-panel h3 {
+      margin-top: 0;
+    }
+
+    .info-panel ul {
+      padding-left: 20px;
+      margin-bottom: 0;
+    }
+
+    .flag-found {
+      color: #f1c40f;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="game-container">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div id="card-container"></div>
+  <div id="deck">Deck</div>
+  <div id="info-panel" class="info-panel"></div>
+
+  <script>
+    const totalMachines = 20;
+    let completedNodes = [];
+    let activeNodes = [1];
+    const container = document.getElementById('game-container');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = 3000;
+
+    const machinePositions = [
+      { id: 1, x: '50%', y: '300px', connections: [2, 3], info: {}, hasFlag: false },
+      { id: 2, x: '35%', y: '500px', connections: [4, 5], info: {}, hasFlag: false },
+      { id: 3, x: '65%', y: '500px', connections: [4, 5], info: {}, hasFlag: false },
+      { id: 4, x: '35%', y: '700px', connections: [6], info: {}, hasFlag: false },
+      { id: 5, x: '65%', y: '700px', connections: [6], info: {}, hasFlag: false },
+      { id: 6, x: '50%', y: '900px', connections: [7, 8], info: {}, hasFlag: false },
+      { id: 7, x: '30%', y: '1100px', connections: [9], info: {}, hasFlag: false },
+      { id: 8, x: '70%', y: '1100px', connections: [10], info: {}, hasFlag: false },
+      { id: 9, x: '25%', y: '1300px', connections: [11], info: {}, hasFlag: false },
+      { id: 10, x: '75%', y: '1300px', connections: [12], info: {}, hasFlag: false },
+      { id: 11, x: '40%', y: '1500px', connections: [13, 15], info: {}, hasFlag: false },
+      { id: 12, x: '60%', y: '1500px', connections: [14, 16], info: {}, hasFlag: false },
+      { id: 13, x: '10%', y: '1700px', connections: [15], info: {}, hasFlag: false },
+      { id: 14, x: '90%', y: '1700px', connections: [16], info: {}, hasFlag: false },
+      { id: 15, x: '40%', y: '1900px', connections: [17], info: {}, hasFlag: false },
+      { id: 16, x: '60%', y: '1900px', connections: [18], info: {}, hasFlag: false },
+      { id: 17, x: '30%', y: '2100px', connections: [19], info: {}, hasFlag: false },
+      { id: 18, x: '70%', y: '2100px', connections: [20], info: {}, hasFlag: false },
+      { id: 19, x: '20%', y: '2300px', connections: [], info: {}, hasFlag: false },
+      { id: 20, x: '80%', y: '2300px', connections: [], info: {}, hasFlag: false }
+    ];
+
+    const cardTypes = [
+      { name: 'Whatweb', command: 'whatweb', gatherInfo: (machine) => {
+        machine.info.webServer = ['Apache', 'Nginx', 'IIS'][Math.floor(Math.random() * 3)];
+      }},
+      { name: 'Nmap', command: 'nmap', gatherInfo: (machine) => {
+        machine.info.openPorts = [80, 443, 22, 21, 3306].sort(() => 0.5 - Math.random()).slice(0, 3);
+      }},
+      { name: 'WPScan', command: 'wpscan', gatherInfo: (machine) => {
+        machine.info.cms = Math.random() < 0.5 ? 'WordPress' : 'None';
+      }},
+      { name: 'CVE Check', command: 'cve-check', gatherInfo: (machine) => {
+        machine.info.vulnerabilities = Math.random() < 0.3 ? ['CVE-2021-1234', 'CVE-2022-5678'] : [];
+      }}
+    ];
+
+    let deck = [];
+    let hand = [];
+
+    function initializeGame() {
+      machinePositions.forEach(pos => {
+        const newNode = createNode(pos.id, pos.x, pos.y);
+        container.appendChild(newNode);
+      });
+      updateNodeStates();
+      drawLines();
+      initializeDeck();
+      drawInitialHand();
+      focusOnActiveNode();
+      
+      // Set a random machine to have the flag
+      const flagMachine = machinePositions[Math.floor(Math.random() * machinePositions.length)];
+      flagMachine.hasFlag = true;
+    }
+
+    function createNode(id, x, y) {
+      const node = document.createElement('div');
+      node.className = 'node';
+      node.id = `node${id}`;
+      node.style.left = x;
+      node.style.top = y;
+      node.innerHTML = `
+        <h3>Machine ${id}</h3>
+        <div class="commands-list"></div>
+      `;
+      node.addEventListener('click', () => showMachineInfo(id));
+      return node;
+    }
+
+    function drawLines() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      machinePositions.forEach(pos => {
+        const fromNode = document.getElementById(`node${pos.id}`);
+        pos.connections.forEach(toId => {
+          const toNode = document.getElementById(`node${toId}`);
+          drawLShapedLine(fromNode, toNode, completedNodes.includes(pos.id));
+        });
+      });
+    }
+
+    function drawLShapedLine(fromNode, toNode, isCompleted) {
+      const startX = fromNode.offsetLeft + fromNode.offsetWidth / 2;
+      const startY = fromNode.offsetTop + fromNode.offsetHeight;
+      const endX = toNode.offsetLeft + toNode.offsetWidth / 2;
+      const endY = toNode.offsetTop;
+
+      const midY = startY + (endY - startY) * 0.5; // Midpoint for the horizontal segment
+
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(startX, midY);
+      ctx.lineTo(endX, midY);
+      ctx.lineTo(endX, endY);
+      
+      ctx.strokeStyle = isCompleted ? '#27ae60' : '#3498db';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Add small circles at the corners for a more polished look
+      drawCircle(startX, midY, 3);
+      drawCircle(endX, midY, 3);
+    }
+
+    function drawCircle(x, y, radius) {
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+    }
+
+    function updateNodeStates() {
+      machinePositions.forEach(pos => {
+        const node = document.getElementById(`node${pos.id}`);
+        node.classList.remove('active', 'completed');
+        if (completedNodes.includes(pos.id)) {
+          node.classList.add('completed');
+        } else if (activeNodes.includes(pos.id)) {
+          node.classList.add('active');
+        }
+      });
+    }
+
+    function showMachineInfo(id) {
+      const machine = machinePositions.find(m => m.id === id);
+      const infoPanel = document.getElementById('info-panel');
+      infoPanel.innerHTML = `
+        <h3>Machine ${id} Info</h3>
+        <ul>
+          ${Object.entries(machine.info).map(([key, value]) => `<li>${key}: ${JSON.stringify(value)}</li>`).join('')}
+        </ul>
+        ${machine.hasFlag ? '<p class="flag-found">Flag found on this machine!</p>' : ''}
+      `;
+      infoPanel.style.display = 'block';
+    }
+
+    function initializeDeck() {
+      deck = [];
+      for (let i = 0; i < 20; i++) {
+        deck.push(cardTypes[Math.floor(Math.random() * cardTypes.length)]);
+      }
+      shuffleDeck();
+    }
+
+    function shuffleDeck() {
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+    }
+
+    function drawCard() {
+      if (deck.length > 0 && hand.length < 5) {
+        const card = deck.pop();
+        hand.push(card);
+        renderHand();
+      }
+    }
+
+    function drawInitialHand() {
+      for (let i = 0; i < 5; i++) {
+        drawCard();
+      }
+    }
+
+    function renderHand() {
+      const cardContainer = document.getElementById('card-container');
+      cardContainer.innerHTML = '';
+      const totalCards = hand.length;
+      const fanAngle = 20; // Total angle of the fan
+      const baseAngle = -fanAngle / 2; // Start angle
+      const angleIncrement = totalCards > 1 ? fanAngle / (totalCards - 1) : 0;
+
+      hand.forEach((card, index) => {
+        const cardElement = document.createElement('div');
+        cardElement.className = 'card';
+        cardElement.textContent = card.name;
+        cardElement.draggable = true;
+        cardElement.addEventListener('dragstart', (e) => dragStart(e, index));
+        cardElement.addEventListener('dragend', dragEnd);
+        
+        const angle = baseAngle + (angleIncrement * index);
+        const offsetX = 20 * (index - (totalCards - 1) / 2); // Adjust horizontal spread
+        
+        cardElement.style.transform = `rotate(${angle}deg) translateX(${offsetX}px)`;
+        cardElement.style.zIndex = index + 1;
+        
+        cardContainer.appendChild(cardElement);
+      });
+    }
+
+    function dragStart(e, index) {
+      e.dataTransfer.setData('text/plain', index);
+      e.target.classList.add('dragging');
+      e.target.style.zIndex = 20;
+    }
+
+    function dragEnd(e) {
+      e.target.classList.remove('dragging');
+      renderHand(); // Re-render to reset positions
+    }
+
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const cardIndex = e.dataTransfer.getData('text/plain');
+      const card = hand[cardIndex];
+      const node = e.target.closest('.node');
+      
+      if (node && node.classList.contains('active')) {
+        const nodeId = parseInt(node.id.replace('node', ''));
+        playCard(card, nodeId);
+        hand.splice(cardIndex, 1);
+        renderHand();
+      }
+    });
+
+    function playCard(card, nodeId) {
+      const node = document.getElementById(`node${nodeId}`);
+      const commandsList = node.querySelector('.commands-list');
+      commandsList.innerHTML += `<div>${card.command}</div>`;
+      
+      // Check if the node is completed after playing the card
+      if (commandsList.children.length >= 3) { // Assuming 3 cards complete a node
+        completeNode(nodeId);
+      }
+    }
+
+    function completeNode(nodeId) {
+      completedNodes.push(nodeId);
+      const newActiveNodes = machinePositions.find(pos => pos.id === nodeId).connections
+        .filter(id => !completedNodes.includes(id));
+      
+      if (newActiveNodes.length > 0) {
+        activeNodes = newActiveNodes;
+        updateNodeStates();
+        drawLines();
+        focusOnActiveNode();
+      } else {
+        // If no new active nodes, keep the current active nodes
+        updateNodeStates();
+        drawLines();
+      }
+    }
+
+    function focusOnActiveNode() {
+      if (activeNodes.length > 0) {
+        const activeNodeId = activeNodes[0];
+        const activeNode = document.getElementById(`node${activeNodeId}`);
+        const rect = activeNode.getBoundingClientRect();
+        const scrollX = rect.left + window.scrollX + rect.width / 2 - window.innerWidth / 2;
+        const scrollY = rect.top + window.scrollY + rect.height / 2 - window.innerHeight / 2;
+
+        window.scrollTo({
+          left: scrollX,
+          top: scrollY,
+          behavior: 'smooth'
+        });
+      }
+    }
+
+    document.getElementById('deck').addEventListener('click', drawCard);
+
+    // Initialize game
+    initializeGame();
+
+    // Center on the first machine after a short delay to ensure proper rendering
+    setTimeout(() => {
+      focusOnActiveNode();
+    }, 100);
+  </script>
+
+</body>
+</html>
